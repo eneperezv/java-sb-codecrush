@@ -1,6 +1,15 @@
 package com.enp.codecrush.api.service;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.hc.core5.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 
 import com.enp.codecrush.api.exception.CompilationException;
 import com.enp.codecrush.api.exception.ExecutionTimeoutException;
@@ -10,24 +19,54 @@ import com.enp.codecrush.api.model.CodeExecutionResponse;
 @Service
 public class CompilerService {
 	
-	public CodeExecutionResponse executeCode(CodeExecutionRequest request) throws CompilationException, ExecutionTimeoutException {
-        // Validación inicial
+	@Value("${sandbox.api-url}")
+    private String sandboxApiUrl;
+
+    @Value("${sandbox.client-id}")
+    private String clientId;
+
+    @Value("${sandbox.client-secret}")
+    private String clientSecret;
+
+    private final RestTemplate restTemplate;
+	
+    public CompilerService(RestTemplateBuilder restTemplateBuilder) {
+        this.restTemplate = restTemplateBuilder.build();
+    }
+
+    public CodeExecutionResponse executeCode(CodeExecutionRequest request) throws CompilationException, ExecutionTimeoutException {
+        // Validar datos
         if (request.getLanguage() == null || request.getCode() == null) {
             throw new CompilationException("El lenguaje y el código son obligatorios.");
         }
 
-        // Simulación de ejecución (reemplazar por integración real con Docker/API externa)
-        try {
-            String output = mockExecution(request.getCode(), request.getLanguage(), request.getInput());
-            return new CodeExecutionResponse(output, null, 500, 0);
-        } catch (Exception e) {
-            throw new CompilationException("Error al compilar el código: " + e.getMessage());
-        }
-    }
+        // Crear payload para el sandbox externo
+        Map<String, String> payload = new HashMap<>();
+        payload.put("clientId", clientId);
+        payload.put("clientSecret", clientSecret);
+        payload.put("script", request.getCode());
+        payload.put("language", request.getLanguage());
+        payload.put("stdin", request.getInput());
+        payload.put("versionIndex", "0");
 
-    private String mockExecution(String code, String language, String input) {
-        // Simula un tiempo de ejecución y salida
-        return "Salida simulada para el código en " + language;
+        try {
+            // Llamada HTTP al servicio externo
+            ResponseEntity<Map> response = restTemplate.postForEntity(sandboxApiUrl, payload, Map.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> body = response.getBody();
+                return new CodeExecutionResponse(
+                    (String) body.get("output"),
+                    (String) body.get("error"),
+                    (long) body.getOrDefault("cpuTime", 0),
+                    0
+                );
+            } else {
+                throw new CompilationException("Error en la ejecución del código en el sandbox.");
+            }
+        } catch (HttpClientErrorException e) {
+            throw new CompilationException("Fallo en el sandbox: " + e.getMessage());
+        }
     }
 
 }
