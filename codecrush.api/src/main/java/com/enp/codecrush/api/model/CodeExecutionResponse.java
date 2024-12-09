@@ -7,6 +7,14 @@ public class CodeExecutionResponse {
     private long executionTime; // Tiempo en ms
     private int statusCode;    // 0 = éxito, 1 = error
     
+	public CodeExecutionResponse(String output, String error, long executionTime, int statusCode) {
+		super();
+		this.output = output;
+		this.error = error;
+		this.executionTime = executionTime;
+		this.statusCode = statusCode;
+	}
+
 	public String getOutput() {
 		return output;
 	}
